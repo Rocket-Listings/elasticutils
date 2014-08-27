@@ -1757,6 +1757,136 @@ class MLT(PythonMixin):
         return self._results_cache
 
 
+class Percolate(PythonMixin):
+    """Represents a lazy Elasticsearch Percolate API request.
+
+    This is lazy in the sense that it doesn't evaluate and execute the
+    Elasticsearch request unless you force it to by iterating over it
+    or getting the length of the search results.
+
+    For example:
+
+    >>> percolate = Percolate(2034, index='addons_index', doctype='addon')
+    >>> num_related_documents = len(mlt)
+    >>> num_related_documents = list(mlt)
+
+    """
+    def __init__(self, index=None, document=None, id_=None, query_type=None, s=None, 
+                doctype=None, es=None, **query_params):
+        """
+        When the MLT is evaluated, it generates a list of dict results.
+
+        :arg id_: The id of the document we want to find more like.
+        :arg s: An instance of an S. Allows you to pass in a query which
+            will be used as the body of the more-like-this request.
+        :arg mlt_fields: A list of fields to look at for more like this.
+        :arg index: The index to use. Falls back to the first index
+            listed in s.get_indexes().
+        :arg doctype: The doctype to use. Falls back to the first
+            doctype listed in s.get_doctypes().
+        :arg es: The `Elasticsearch` object to use. If you don't
+            provide one, then it will create one for you.
+        :arg query_params: Any additional query parameters for the
+            more like this call.
+
+        .. Note::
+
+           You must specify either an `s` or the `index` and `doctype`
+           arguments. Omitting them will result in a `ValueError`.
+
+        """
+        # You have to provide either an s OR an index and a doc_type.
+        if s is None and (index is None or doctype is None):
+            raise ValueError(
+                'Either you must provide a valid s or index and doc_type')
+
+        # You have to provide either a document or an id_ with which to percolate.
+        if document is None and id_ is None:
+            raise ValueError(
+                'You must provide either a valid document or document id')
+
+        self.s = s
+        if s is not None:
+            # If an index or doctype isn't given, we use the first one
+            # in the S.
+            self.index = index or s.get_indexes()[0]
+            self.doctype = doctype or s.get_doctypes()[0]
+            self.type = s.type
+        else:
+            self.index = index
+            self.doctype = doctype
+            self.type = None
+
+        self.query_type = query_type
+        self.document = document
+        self.id = id_
+        self.es = es
+        self.query_params = query_params
+        self._results_cache = None
+
+    def __iter__(self):
+        return iter(self._do_search())
+
+    def __len__(self):
+        return len(self._do_search())
+
+    def get_es(self):
+        """Returns an `Elasticsearch`.
+
+        * If there's an s, then it returns that `Elasticsearch`.
+        * If the es was provided in the constructor, then it returns
+          that `Elasticsearch`.
+        * Otherwise, it creates a new `Elasticsearch` and returns
+          that.
+
+        Override this if that behavior isn't correct for you.
+
+        """
+        if self.s:
+            return self.s.get_es()
+
+        return self.es or get_es()
+
+    def raw(self):
+        """
+        Build query and passes to `Elasticsearch`, then returns the raw
+        format returned.
+        """
+        es = self.get_es()
+
+        params = dict(self.query_params)
+
+        if self.s:
+            body = self.s.build_search()
+            if not self.id and self.document:
+                body['doc'] = self.document
+        elif not self.id and self.document:
+            body = {'doc': self.document}
+        else:
+            body = ''
+
+
+        matches = es.percolate(
+            index=self.index, doc_type=self.doctype, id=self.id,
+            body=body, params=params)
+
+        log.debug(matches)
+
+        return matches
+
+    def _do_search(self):
+        """
+        Perform the mlt call, then convert that raw format into a
+        SearchResults instance and return it.
+        """
+        if self._results_cache is None:
+            response = self.raw()
+            results = self.to_python(response.get('matches', []))
+            self._results_cache = ObjectSearchResults(
+                self.query_type, response, results, None)
+        return self._results_cache
+
+
 class SearchResults(object):
     """
     After executing a search, this is the class that manages the
@@ -1788,8 +1918,8 @@ class SearchResults(object):
 
     """
 
-    def __init__(self, type, response, results, fields):
-        self.type = type
+    def __init__(self, type_, response, results, fields):
+        self.type = type_
         self.response = response
         self.took = response.get('took', 0)
         self.count = response.get('hits', {}).get('total', 0)
@@ -1846,6 +1976,7 @@ class DictSearchResults(SearchResults):
         # Decorate with metadata and listify values
         self.objects = [decorate_with_metadata(DictResult(listify(obj)), r)
                         for obj, r in objs]
+
 
 class ListSearchResults(SearchResults):
     """
