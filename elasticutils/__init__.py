@@ -1814,7 +1814,6 @@ class Percolate(PythonMixin):
 
         self.query_type = query_type
         self.doc = doc
-        self.id = id_
         self.es = es
         self.query_params = query_params
         self._results_cache = None
