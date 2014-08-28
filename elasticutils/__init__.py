@@ -1771,7 +1771,7 @@ class Percolate(PythonMixin):
     >>> num_related_documents = list(mlt)
 
     """
-    def __init__(self, index=None, document=None, id_=None, query_type=None, s=None, 
+    def __init__(self, doc, index=None, query_type=None, s=None, 
                 doctype=None, es=None, **query_params):
         """
         When the MLT is evaluated, it generates a list of dict results.
@@ -1800,11 +1800,6 @@ class Percolate(PythonMixin):
             raise ValueError(
                 'Either you must provide a valid s or index and doc_type')
 
-        # You have to provide either a document or an id_ with which to percolate.
-        if document is None and id_ is None:
-            raise ValueError(
-                'You must provide either a valid document or document id')
-
         self.s = s
         if s is not None:
             # If an index or doctype isn't given, we use the first one
@@ -1818,7 +1813,7 @@ class Percolate(PythonMixin):
             self.type = None
 
         self.query_type = query_type
-        self.document = document
+        self.doc = doc
         self.id = id_
         self.es = es
         self.query_params = query_params
@@ -1858,25 +1853,14 @@ class Percolate(PythonMixin):
 
         if self.s:
             body = self.s.build_search()
-            if not self.id and self.document:
-                body['doc'] = self.document
-        elif not self.id and self.document:
-            body = {'doc': self.document}
+            body['doc'] = self.document
         else:
-            body = ''
-
-        log.info("index: " + self.index)
-        log.info("doc_type: " + self.doctype)
-        log.info("id: " + self.id)
-        log.info("params: " + params)
-        log.info("body: " + body)
-
+            body = {'doc': self.document}
 
         matches = es.percolate(
-            index=self.index, doc_type=self.doctype, id=self.id,
-            body=body, params=params)
+            index=self.index, doc_type=self.doctype, body=body, params=params)
 
-        log.info(matches)
+        log.debug(matches)
 
         return matches
 
