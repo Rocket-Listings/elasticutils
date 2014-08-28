@@ -1852,9 +1852,9 @@ class Percolate(PythonMixin):
 
         if self.s:
             body = self.s.build_search()
-            body['doc'] = self.document
+            body['doc'] = self.doc
         else:
-            body = {'doc': self.document}
+            body = {'doc': self.doc}
 
         matches = es.percolate(
             index=self.index, doc_type=self.doctype, body=body, params=params)
