@@ -1865,20 +1865,18 @@ class Percolate(PythonMixin):
         else:
             body = ''
 
-        print "index: ", self.index
-        print "doc_type: ", self.doctype,
-        print "id: ", self.id
-        print "params: ", params
-        print "body: ", body
+        log.info("index: " + self.index)
+        log.info("doc_type: " + self.doctype)
+        log.info("id: " + self.id)
+        log.info("params: " + params)
+        log.info("body: " + body)
 
 
         matches = es.percolate(
             index=self.index, doc_type=self.doctype, id=self.id,
             body=body, params=params)
 
-        log.debug(matches)
-
-        print matches
+        log.info(matches)
 
         return matches
 
